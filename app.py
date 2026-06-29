@@ -1,6 +1,13 @@
 import streamlit as st
 import numpy as np
 import cv2
+
+import onnxruntime as ort
+
+@st.cache_resource
+def load_model():
+    return ort.InferenceSession("model.onnx")
+    
 from PIL import Image
 import tensorflow as tf
 
