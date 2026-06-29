@@ -1,52 +1,46 @@
 import streamlit as st
 import numpy as np
 import cv2
-
 import onnxruntime as ort
-
-@st.cache_resource
-def load_model():
-    return ort.InferenceSession("model.onnx")
-    
 from PIL import Image
-import tensorflow as tf
 
 # Konfigurasi Halaman
 st.set_page_config(page_title="Hadi Engine NN", layout="wide")
 
-# Karakter map yang digunakan saat training (contoh: huruf kecil + angka)
+# Karakter map yang digunakan saat training
 characters = "abcdefghijklmnopqrstuvwxyz0123456789"
 
-# Muat Model Neural Network secara Cache
+# Muat Model ONNX secara Cache (Super Ringan & Hemat RAM)
 @st.cache_resource
-def load_custom_model():
-    # Pastikan file 'model.keras' sudah di-upload ke repositori Anda
-    return tf.keras.models.load_model("model.keras")
+def load_onnx_model():
+    # Pastikan file 'model.onnx' sudah di-upload ke repositori GitHub Anda
+    return ort.InferenceSession("model.onnx")
 
 try:
-    model = load_custom_model()
+    session = load_onnx_model()
 except Exception as e:
-    st.error("Gagal memuat file model. Pastikan 'model.keras' ada di repositori.")
-    model = None
+    st.error("Gagal memuat file model. Pastikan 'model.onnx' ada di repositori.")
+    session = None
 
 # UI Streamlit
-st.title("Neural Network Image Reader")
+st.title("Neural Network Image Reader (ONNX)")
 
 uploaded_file = st.file_uploader("Unggah Gambar", type=["png", "jpg", "jpeg"])
 
-if uploaded_file is not None and model is not None:
+if uploaded_file is not None and session is not None:
     img = Image.open(uploaded_file)
     
-    # Pre-processing agar sesuai dengan input model (contoh: Grayscale & Resize)
+    # Pre-processing (Samakan persis dengan setelan saat Anda training model)
     img_gray = img.convert("L")
-    img_resized = img_gray.resize((200, 50))  # Sesuaikan ukuran input model Anda
+    img_resized = img_gray.resize((200, 50))  # Sesuaikan ukuran input model Anda (Lebar, Tinggi)
     
-    img_array = np.array(img_resized) / 255.0  # Normalisasi
-    img_array = np.expand_dims(img_array, axis=-1)  # Tambah channel dimension (50, 200, 1)
-    img_input = np.expand_dims(img_array, axis=0)   # Tambah batch dimension (1, 50, 200, 1)
+    img_array = np.array(img_resized).astype(np.float32) / 255.0  # Wajib float32 untuk ONNX
+    img_array = np.expand_dims(img_array, axis=-1)  # Menjadi shape (50, 200, 1)
+    img_input = np.expand_dims(img_array, axis=0)   # Menjadi shape (1, 50, 200, 1)
     
-    # Prediksi menggunakan Neural Network
-    predictions = model.predict(img_input)
+    # Prediksi menggunakan ONNX Runtime
+    input_name = session.get_inputs()[0].name
+    predictions = session.run(None, {input_name: img_input})
     
     # Menerjemahkan output matriks menjadi teks string
     predicted_text = ""
