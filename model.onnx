@@ -1,0 +1,74 @@
+import tensorflow as tf
+from tensorflow.keras import layers, models
+import tf2onnx
+import onnx
+import numpy as np
+
+print("Sedang membuat arsitektur Neural Network tiruan...")
+
+# 1. Definisi Arsitektur Model (Sama seperti target di app.py)
+# Input: Grayscale 50x200
+input_shape = (50, 200, 1)
+# Output: 4 karakter, masing-masing 36 kelas (huruf+angka)
+num_chars = 4
+num_classes = 36
+
+inputs = layers.Input(shape=input_shape, name="input_image")
+
+# CNN Layers sederhana (untuk ekstraksi fitur)
+x = layers.Conv2D(16, (3, 3), activation="relu", padding="same")(inputs)
+x = layers.MaxPooling2D((2, 2))(x)
+x = layers.Conv2D(32, (3, 3), activation="relu", padding="same")(x)
+x = layers.MaxPooling2D((2, 2))(x)
+x = layers.Flatten()(x)
+x = layers.Dense(64, activation="relu")(x)
+
+# Multi-output: 4 Dense layers untuk memprediksi 4 posisi karakter
+# Nama output harus unik
+outputs = []
+for i in range(num_chars):
+    out = layers.Dense(num_classes, activation="softmax", name=f"output_char_{i+1}")(x)
+    outputs.append(out)
+
+# Build Model Keras
+model_keras = models.Model(inputs=inputs, outputs=outputs)
+
+# Bobot model ini acak (random), jadi prediksinya akan ngawur,
+# tapi file ini valid untuk testing inferensi di app.py.
+print("Model Keras berhasil dibuat.")
+
+# 2. Konversi ke Format ONNX
+print("\nSedang mengonversi model ke format ONNX...")
+
+# Tentukan spesifikasi input (sangat krusial untuk ONNX)
+# Gunakan batch size None (bisa 1 atau lebih) agar fleksibel, atau 1 jika kaku.
+# Gunakan float32 karena model ini tidak ditraining.
+input_spec = (tf.TensorSpec((None, 50, 200, 1), tf.float32, name="input_image"),)
+
+# Nama file output
+onnx_filename = "model.onnx"
+
+# Proses Konversi
+# opset 13 ke atas biasanya aman untuk model TensorFlow 2.x
+model_proto, _ = tf2onnx.convert.from_keras(
+    model_keras,
+    input_signature=input_spec,
+    opset=13,
+    output_path=onnx_filename
+)
+
+# 3. Verifikasi File ONNX
+print(f"\nProses selesai. File berhasil disimpan sebagai: {onnx_filename}")
+
+# Coba muat file onnx yang baru dibuat untuk memastikan valid
+try:
+    onnx_model = onnx.load(onnx_filename)
+    onnx.checker.check_model(onnx_model)
+    print("Verifikasi ONNX: File valid dan siap digunakan.")
+except Exception as e:
+    print(f"Verifikasi ONNX Gagal: {e}")
+
+# (Opsional) Cek ukuran file
+import os
+file_size_mb = os.path.getsize(onnx_filename) / (1024 * 1024)
+print(f"Ukuran file: {file_size_mb:.2f} MB")
